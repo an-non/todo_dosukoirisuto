@@ -1,6 +1,6 @@
 {
-  "buildCommand": "cd kadai_app && npm run build",
-  "installCommand": "cd kadai_app && npm install",
-  "rootDirectory": "kadai_app"
+ "rootDirectory": "kadai_app",
+ "buildCommand": "npm run build",
+ "installCommand": "npm install"
 }
 
