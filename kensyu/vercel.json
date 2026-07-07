@@ -1,8 +1,7 @@
 {
- "rootDirectory": "kadai_app",
- "installCommand": "npm install",
- "buildCommand": "npm run build",
- "outputDirectory": "build",
- "publicDirectory": "public"
+  "rootDirectory": "kadai_app",
+  "installCommand": "npm install",
+  "buildCommand": "npm run build",
+  "publicDirectory": "public"
 }
 
