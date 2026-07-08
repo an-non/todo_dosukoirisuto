@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { listTasks, createTask } from '../../../lib/db';
+// sqlite/db.ts exists at: src/lib/db.ts
+
 
 export async function GET() {
   const tasks = await listTasks();
@@ -16,4 +18,5 @@ export async function POST(req: Request) {
   const task = await createTask({ title, notes });
   return NextResponse.json({ task }, { status: 201 });
 }
+
 

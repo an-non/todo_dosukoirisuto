@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { toggleDone } from '../../../../../lib/db';
+// sqlite/db.ts exists at: src/lib/db.ts
+
 
 export async function POST(
   _req: Request,
@@ -23,4 +25,5 @@ export async function POST(
     return NextResponse.json({ error: 'internal server error' }, { status: 500 });
   }
 }
+
 

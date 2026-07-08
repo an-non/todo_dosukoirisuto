@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import BrowserTodoNotifier from './BrowserTodoNotifier';
+import NotificationPermissionGate from './NotificationPermissionGate';
 
 type Task = {
   id: number;
@@ -19,10 +21,12 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
       ...(init?.headers ?? {}),
     },
   });
+
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(text || `Request failed: ${res.status}`);
   }
+
   return (await res.json()) as T;
 }
 
@@ -62,6 +66,7 @@ export default function TaskManager() {
   async function handleCreate() {
     const t = title.trim();
     if (!t) return;
+
     try {
       await api('/api/tasks', {
         method: 'POST',
@@ -89,8 +94,10 @@ export default function TaskManager() {
 
   async function handleUpdate() {
     if (editingId == null) return;
+
     const t = editTitle.trim();
     if (!t) return;
+
     try {
       await api(`/api/tasks/${editingId}`, {
         method: 'PUT',
@@ -114,6 +121,7 @@ export default function TaskManager() {
 
   async function remove(taskId: number) {
     if (!confirm('このタスクを削除しますか？')) return;
+
     try {
       await api(`/api/tasks/${taskId}`, { method: 'DELETE' });
       if (editingId === taskId) cancelEdit();
@@ -124,112 +132,114 @@ export default function TaskManager() {
   }
 
   return (
-    <div className="grid2">
-      <section className="card">
-        <h2>タスクの追加</h2>
-        <div className="row" style={{ marginBottom: 10 }}>
-          <div style={{ flex: 1, minWidth: 220 }}>
-            <label className="badge" style={{ marginBottom: 6 }}>
-              <input className="checkbox" type="checkbox" checked={true} readOnly />
-              CREATE
-            </label>
-            <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="タスク名（必須）"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleCreate();
-              }}
-            />
+    <>
+      <NotificationPermissionGate />
+      <BrowserTodoNotifier />
+      <div className="grid2">
+        <section className="card">
+          <h2>タスクの追加</h2>
+
+          <div className="row" style={{ marginBottom: 10 }}>
+            <div style={{ flex: 1, minWidth: 220 }}>
+              <label className="badge" style={{ marginBottom: 6 }}>
+                <input className="checkbox" type="checkbox" checked={true} readOnly />
+                CREATE
+              </label>
+
+              <input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="タスク名（必須）"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleCreate();
+                }}
+              />
+            </div>
           </div>
-        </div>
 
-        <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="メモ（任意）" />
+          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="メモ（任意）" />
 
-        <div style={{ height: 10 }} />
-        <div className="row">
-          <button className="primary" onClick={handleCreate}>
-            追加
-          </button>
-          <div className="meta">
-            {totalCount} 件中 {doneCount} 件 完了
+          <div style={{ height: 10 }} />
+
+          <div className="row">
+            <button className="primary" onClick={handleCreate}>
+              追加
+            </button>
+            <div className="meta">
+              {totalCount} 件中 {doneCount} 件 完了
+            </div>
           </div>
-        </div>
 
-        {error ? (
-          <div style={{ marginTop: 12, color: '#ffb3c0' }}>エラー: {error}</div>
-        ) : null}
-      </section>
+          {error ? <div style={{ marginTop: 12, color: '#ffb3c0' }}>エラー: {error}</div> : null}
+        </section>
 
-      <section className="card">
-        <h2>一覧（READ / UPDATE / DELETE / 完了切替）</h2>
+        <section className="card">
+          <h2>一覧（READ / UPDATE / DELETE / 完了切替）</h2>
 
-        {loading ? <div className="meta">読み込み中...</div> : null}
+          {loading ? <div className="meta">読み込み中...</div> : null}
+          {!loading && tasks.length === 0 ? <div className="meta">タスクはありません。</div> : null}
 
-        {!loading && tasks.length === 0 ? <div className="meta">タスクはありません。</div> : null}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {tasks.map((t) => {
+              const isEditing = editingId === t.id;
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {tasks.map((t) => {
-            const isEditing = editingId === t.id;
-            return (
-              <div key={t.id} className={`task ${t.done === 1 ? 'taskDone' : ''}`}>
-                <div>
-                  {isEditing ? (
-                    <>
-                      <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
-                      <div style={{ height: 8 }} />
-                      <textarea value={editNotes} onChange={(e) => setEditNotes(e.target.value)} />
-                      <div style={{ height: 10 }} />
-                      <div className="row">
-                        <button className="primary small" onClick={handleUpdate}>
-                          更新
-                        </button>
-                        <button className="small" onClick={cancelEdit}>
-                          キャンセル
-                        </button>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <div style={{ fontWeight: 900, fontSize: 16, marginBottom: 6 }}>
-                        {t.title}
-                      </div>
-                      {t.notes ? <div className="meta">{t.notes}</div> : null}
-                      <div className="meta">
-                        更新: {new Date(t.updated_at).toLocaleString()}
-                      </div>
-                      <div style={{ height: 10 }} />
-                      <div className="row">
-                        <label className="badge" style={{ cursor: 'pointer' }}>
-                          <input
-                            className="checkbox"
-                            type="checkbox"
-                            checked={t.done === 1}
-                            onChange={() => toggleDone(t)}
-                          />
-                          {t.done === 1 ? '完了' : '未完了'}
-                        </label>
-                      </div>
-                    </>
-                  )}
-                </div>
+              return (
+                <div key={t.id} className={`task ${t.done === 1 ? 'taskDone' : ''}`}>
+                  <div>
+                    {isEditing ? (
+                      <>
+                        <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
+                        <div style={{ height: 8 }} />
+                        <textarea value={editNotes} onChange={(e) => setEditNotes(e.target.value)} />
+                        <div style={{ height: 10 }} />
+                        <div className="row">
+                          <button className="primary small" onClick={handleUpdate}>
+                            更新
+                          </button>
+                          <button className="small" onClick={cancelEdit}>
+                            キャンセル
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div style={{ fontWeight: 900, fontSize: 16, marginBottom: 6 }}>{t.title}</div>
+                        {t.notes ? <div className="meta">{t.notes}</div> : null}
+                        <div className="meta">更新: {new Date(t.updated_at).toLocaleString()}</div>
 
-                {!isEditing ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
-                    <button className="small" onClick={() => startEdit(t)}>
-                      編集
-                    </button>
-                    <button className="small danger" onClick={() => remove(t.id)}>
-                      削除
-                    </button>
+                        <div style={{ height: 10 }} />
+                        <div className="row">
+                          <label className="badge" style={{ cursor: 'pointer' }}>
+                            <input
+                              className="checkbox"
+                              type="checkbox"
+                              checked={t.done === 1}
+                              onChange={() => toggleDone(t)}
+                            />
+                            {t.done === 1 ? '完了' : '未完了'}
+                          </label>
+                        </div>
+                      </>
+                    )}
                   </div>
-                ) : null}
-              </div>
-            );
-          })}
-        </div>
-      </section>
-    </div>
+
+                  {!isEditing ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
+                      <button className="small" onClick={() => startEdit(t)}>
+                        編集
+                      </button>
+                      <button className="small danger" onClick={() => remove(t.id)}>
+                        削除
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      </div>
+    </>
   );
 }
 

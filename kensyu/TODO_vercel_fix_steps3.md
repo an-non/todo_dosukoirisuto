@@ -1,0 +1,5 @@
+- [ ] 通知対象API(/api/notifications/todos)を SQLite tasks から作る（期限・所要時間なしの代替ロジックで通知）
+- [ ] todo-links API(/api/todo-links)を SQLite(tasks) から簡易リンク生成（雛形ではなく実データ）
+- [ ] todo-links/batch API を 501 から最低限の CRUD にする
+- [ ] Vercel用 404 の根本確認（必要なら vercel.json / rootDirectory / next output 設定修正）
+- [ ] ビルド/ローカル動作確認（npm run build）
