@@ -4,7 +4,12 @@ import sqlite3 from 'sqlite3';
 
 // Vercelなどのサーバレス環境で /var/task 直下への書き込みが失敗するため、
 // 書き込み可能な一時領域に DB を置く（ローカルは従来の data/tasks.sqlite）。
-const DATA_DIR = process.env.NEXT_PUBLIC_DB_DIR ?? path.join(process.cwd(), 'data');
+// サーバ用途なので優先度は DB_DIR → NEXT_PUBLIC_DB_DIR（互換）→ /tmp/data → process.cwd()/data
+const DATA_DIR =
+  process.env.DB_DIR ??
+  process.env.NEXT_PUBLIC_DB_DIR ??
+  '/tmp/data' ??
+  path.join(process.cwd(), 'data');
 const DB_PATH = path.join(DATA_DIR, 'tasks.sqlite');
 
 // Vercel等のサーバレス環境ではファイル永続が保証されないため、
