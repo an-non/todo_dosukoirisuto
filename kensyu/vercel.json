@@ -1,7 +1,6 @@
 {
-  "rootDirectory": "kadai_app",
-  "installCommand": "npm install",
-  "buildCommand": "npm run build",
-  "outputDirectory": ".next",
-  "publicDir": "public"
+  "installCommand": "npm install --prefix kadai_app",
+  "buildCommand": "npm run build --prefix kadai_app",
+  "outputDirectory": "kadai_app/.next",
+  "publicDir": "kadai_app/public"
 }
