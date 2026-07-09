@@ -6,13 +6,15 @@ import sqlite3 from 'sqlite3';
 // 書き込み可能な一時領域に DB を置く（ローカルは従来の data/tasks.sqlite）。
 // サーバ用途なので優先度は DB_DIR → NEXT_PUBLIC_DB_DIR（互換）→ /tmp/data → process.cwd()/data
 const DATA_DIR =
-  process.env.DB_DIR ??
-  process.env.NEXT_PUBLIC_DB_DIR ??
-  '/tmp/data';
+  (typeof process.env.DB_DIR === 'string' && process.env.DB_DIR.trim().length > 0
+    ? process.env.DB_DIR.trim()
+    : typeof process.env.NEXT_PUBLIC_DB_DIR === 'string' && process.env.NEXT_PUBLIC_DB_DIR.trim().length > 0
+      ? process.env.NEXT_PUBLIC_DB_DIR.trim()
+      : '/tmp/data') as string;
 
 const FALLBACK_DATA_DIR = path.join(process.cwd(), 'data');
 
-const resolvedDataDir = DATA_DIR || FALLBACK_DATA_DIR;
+const resolvedDataDir = (DATA_DIR ?? FALLBACK_DATA_DIR) as string;
 const DB_PATH = path.join(resolvedDataDir, 'tasks.sqlite');
 
 // NOTE: DATA_DIR 自体は型推論上 string になり得るため、resolvedDataDir を使ってディレクトリ作成する。
