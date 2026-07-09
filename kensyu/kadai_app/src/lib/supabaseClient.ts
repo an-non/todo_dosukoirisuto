@@ -1,18 +1,3 @@
-import { createClient } from '@supabase/supabase-js';
-
-// 公開値（フロント/サーバ双方で参照）
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-if (!supabaseUrl) {
-  throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL');
-}
-if (!supabaseAnonKey) {
-  throw new Error('Missing NEXT_PUBLIC_SUPABASE_ANON_KEY');
-}
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
 import { cookies } from 'next/headers';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
@@ -26,6 +11,7 @@ function missingSupabaseConfigError(): Error {
 // フロント/サーバ用（未設定でもビルドが落ちないように、未設定時は null 扱いにする）
 export const supabase: SupabaseClient | null =
   supabaseUrl && supabaseAnonKey ? createClient(supabaseUrl, supabaseAnonKey) : null;
+
 
 /**
  * Route Handler 用（cookies の session から user を復元して RLS 前提で扱う）
