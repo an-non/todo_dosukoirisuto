@@ -8,16 +8,21 @@ import sqlite3 from 'sqlite3';
 const DATA_DIR =
   process.env.DB_DIR ??
   process.env.NEXT_PUBLIC_DB_DIR ??
-  '/tmp/data' ??
-  path.join(process.cwd(), 'data');
-const DB_PATH = path.join(DATA_DIR, 'tasks.sqlite');
+  '/tmp/data';
+
+const FALLBACK_DATA_DIR = path.join(process.cwd(), 'data');
+
+const resolvedDataDir = DATA_DIR || FALLBACK_DATA_DIR;
+const DB_PATH = path.join(resolvedDataDir, 'tasks.sqlite');
+
+// NOTE: DATA_DIR 自体は型推論上 string になり得るため、resolvedDataDir を使ってディレクトリ作成する。
 
 // Vercel等のサーバレス環境ではファイル永続が保証されないため、
 // 常にプロジェクトルート相対の保存先を使えるようにする。
 // （ローカルでは従来通り data/tasks.sqlite を利用）
 
 function openDb() {
-  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+  if (!fs.existsSync(resolvedDataDir)) fs.mkdirSync(resolvedDataDir, { recursive: true });
 
   const db = new sqlite3.Database(DB_PATH);
 
