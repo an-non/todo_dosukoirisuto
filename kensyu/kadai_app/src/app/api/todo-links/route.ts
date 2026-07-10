@@ -1,36 +1,41 @@
 import { NextResponse } from 'next/server';
+import { getSupabaseServerClient } from '../../../lib/supabaseClient';
 
-// TODOリンク機能（イメージツリー描画）用のAPIの土台。
-// 現状プロジェクトは tasks のみで、todo_links / todos の追加が未実装。
-// まずはAPIの設計だけ置いて、必要なDBスキーマ/型が決まり次第実装します。
-
-import { listTasks } from '../../../lib/db';
+type TaskLite = {
+  id: string;
+  title: string;
+};
 
 type TodoLink = {
-  id: number;
-  from_todo_id: number;
-  to_todo_id: number;
+  id: string;
+  from_task_id: string;
+  to_task_id: string;
   created_at: string;
 };
 
-
 export async function GET() {
-  // 簡易実装: タスクをID昇順に並べて、隣同士をリンクする（雛形ではなくデータを返す）
-  const tasks = await listTasks();
-  const sorted = [...tasks].sort((a, b) => a.id - b.id);
-  const links = [] as Array<{ id: number; from_todo_id: number; to_todo_id: number; created_at: string }>;
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  for (let i = 0; i < sorted.length - 1; i++) {
-    const from = sorted[i];
-    const to = sorted[i + 1];
-    links.push({
-      id: i + 1,
-      from_todo_id: from.id,
-      to_todo_id: to.id,
-      created_at: new Date().toISOString(),
-    });
+  // prerender/export 時に env 未設定で落ちないようにする（空レスポンス）
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return NextResponse.json({ links: [] as TodoLink[] });
   }
 
-  return NextResponse.json({ links });
+  const supabase = await getSupabaseServerClient();
+
+
+  const [{ data: tasksData, error: tasksErr }, { data: linksData, error: linksErr }] = await Promise.all([
+    supabase.from('tasks').select('id, title').order('updated_at', { ascending: false }).limit(200),
+    supabase.from('task_links').select('id, from_task_id, to_task_id, created_at').order('created_at', { ascending: true }),
+  ]);
+
+  if (tasksErr) return NextResponse.json({ error: tasksErr.message }, { status: 500 });
+  if (linksErr) return NextResponse.json({ error: linksErr.message }, { status: 500 });
+
+  // フロント側の既存型互換のため response を { links } へ。
+  // TodoLinkGraph が tasks を別APIで取得している前提のため links だけ返す。
+  return NextResponse.json({ links: linksData as TodoLink[] });
 }
+
 

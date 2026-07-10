@@ -1,41 +1,81 @@
 import { NextResponse } from 'next/server';
-import { deleteTask, getTaskById, updateTask } from '../../../../lib/db';
+import { getSupabaseServerClient } from '../../../../lib/supabaseClient';
+
+type TaskRow = {
+  id: string;
+  title: string;
+  notes: string | null;
+  done: boolean;
+  remind_at: string | null;
+  reminder_sent_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
 
 export async function PUT(
   req: Request,
   { params }: { params: { id: string } }
 ) {
-  const id = Number(params.id);
-  if (!Number.isFinite(id)) {
-    return NextResponse.json({ error: 'invalid id' }, { status: 400 });
-  }
+  try {
+    const supabase = await getSupabaseServerClient();
 
-  const existing = await getTaskById(id);
-  if (!existing) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 });
-  }
+    const id = params.id;
+    const body = (await req.json()) as {
+      title?: string;
+      notes?: string | null;
+      remind_at?: string | null;
+    };
 
-  const body = (await req.json()) as { title?: string; notes?: string | null };
-  const title = (body.title ?? '').trim();
-  if (!title) {
-    return NextResponse.json({ error: 'title is required' }, { status: 400 });
-  }
-  const notes = typeof body.notes === 'string' ? body.notes : null;
+    const title = (body.title ?? '').trim();
+    if (!title || title.length < 1 || title.length > 80) {
+      return NextResponse.json({ error: 'title must be 1..80 chars' }, { status: 400 });
+    }
 
-  const task = await updateTask(id, { title, notes });
-  return NextResponse.json({ task });
+    const notes = typeof body.notes === 'string' ? body.notes : null;
+
+    const remindAtRaw = body.remind_at ?? null;
+    const remind_at =
+      typeof remindAtRaw === 'string' && remindAtRaw.length ? remindAtRaw : null;
+
+    if (remind_at != null) {
+      const d = new Date(remind_at);
+      if (Number.isNaN(d.getTime())) {
+        return NextResponse.json({ error: 'remind_at must be an ISO datetime' }, { status: 400 });
+      }
+    }
+
+    const { data, error } = await supabase
+      .from('tasks')
+      .update({ title, notes, remind_at })
+      .eq('id', id)
+      .select(
+        'id, title, notes, done, remind_at, reminder_sent_at, created_at, updated_at'
+      )
+      .single();
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ task: data as TaskRow });
+  } catch {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  }
 }
 
 export async function DELETE(
   _req: Request,
   { params }: { params: { id: string } }
 ) {
-  const id = Number(params.id);
-  if (!Number.isFinite(id)) {
-    return NextResponse.json({ error: 'invalid id' }, { status: 400 });
-  }
-  await deleteTask(id);
-  return NextResponse.json({ ok: true });
-}
+  try {
+    const supabase = await getSupabaseServerClient();
 
+    const { error } = await supabase
+      .from('tasks')
+      .delete()
+      .eq('id', params.id);
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ ok: true });
+  } catch {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  }
+}
 

@@ -3,12 +3,16 @@
 import { useEffect, useMemo, useState } from 'react';
 import BrowserTodoNotifier from './BrowserTodoNotifier';
 import NotificationPermissionGate from './NotificationPermissionGate';
+import PushNotificationSetup from './PushNotificationSetup';
+
 
 type Task = {
-  id: number;
+  id: string;
   title: string;
   notes: string | null;
-  done: 0 | 1;
+  done: boolean;
+  remind_at: string | null;
+  reminder_sent_at: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -37,12 +41,19 @@ export default function TaskManager() {
 
   const [title, setTitle] = useState('');
   const [notes, setNotes] = useState('');
+  const [remindAt, setRemindAt] = useState(''); // datetime-local string
 
-  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [editNotes, setEditNotes] = useState('');
 
-  const doneCount = useMemo(() => tasks.filter((t) => t.done === 1).length, [tasks]);
+  // --- todo_links: link add mode ---
+  const [linkFromId, setLinkFromId] = useState<string | null>(null);
+  const [linkToId, setLinkToId] = useState<string | null>(null);
+  const [linkBusy, setLinkBusy] = useState(false);
+
+
+  const doneCount = useMemo(() => tasks.filter((t) => t.done).length, [tasks]);
   const totalCount = tasks.length;
 
   async function refresh() {
@@ -68,12 +79,16 @@ export default function TaskManager() {
     if (!t) return;
 
     try {
+      const remind_at = remindAt.trim() ? remindAt : null;
+
       await api('/api/tasks', {
         method: 'POST',
-        body: JSON.stringify({ title: t, notes: notes.trim() || null }),
+        body: JSON.stringify({ title: t, notes: notes.trim() || null, remind_at }),
       });
+
       setTitle('');
       setNotes('');
+      setRemindAt('');
       await refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -101,7 +116,12 @@ export default function TaskManager() {
     try {
       await api(`/api/tasks/${editingId}`, {
         method: 'PUT',
-        body: JSON.stringify({ title: t, notes: editNotes.trim() || null }),
+        body: JSON.stringify({
+          title: t,
+          notes: editNotes.trim() || null,
+          // remind_at を更新時に消さない（通知日時維持）
+          remind_at: tasks.find((x) => x.id === editingId)?.remind_at ?? undefined,
+        }),
       });
       cancelEdit();
       await refresh();
@@ -119,7 +139,7 @@ export default function TaskManager() {
     }
   }
 
-  async function remove(taskId: number) {
+  async function remove(taskId: string) {
     if (!confirm('このタスクを削除しますか？')) return;
 
     try {
@@ -134,7 +154,9 @@ export default function TaskManager() {
   return (
     <>
       <NotificationPermissionGate />
+      <PushNotificationSetup />
       <BrowserTodoNotifier />
+
       <div className="grid2">
         <section className="card">
           <h2>タスクの追加</h2>
@@ -161,6 +183,21 @@ export default function TaskManager() {
 
           <div style={{ height: 10 }} />
 
+          <div className="row" style={{ alignItems: 'center', gap: 10 }}>
+            <div style={{ flex: 1, minWidth: 220 }}>
+              <input
+                type="datetime-local"
+                value={remindAt}
+                onChange={(e) => setRemindAt(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="meta" style={{ marginTop: 6 }}>
+            通知日時（任意）
+          </div>
+
+          <div style={{ height: 10 }} />
+
           <div className="row">
             <button className="primary" onClick={handleCreate}>
               追加
@@ -182,9 +219,12 @@ export default function TaskManager() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {tasks.map((t) => {
               const isEditing = editingId === t.id;
+              const isLinkFrom = linkFromId === t.id;
+              const isLinkTo = linkToId === t.id;
 
               return (
-                <div key={t.id} className={`task ${t.done === 1 ? 'taskDone' : ''}`}>
+                <div key={t.id} className={`task ${t.done ? 'taskDone' : ''}`}>
+
                   <div>
                     {isEditing ? (
                       <>
@@ -210,13 +250,8 @@ export default function TaskManager() {
                         <div style={{ height: 10 }} />
                         <div className="row">
                           <label className="badge" style={{ cursor: 'pointer' }}>
-                            <input
-                              className="checkbox"
-                              type="checkbox"
-                              checked={t.done === 1}
-                              onChange={() => toggleDone(t)}
-                            />
-                            {t.done === 1 ? '完了' : '未完了'}
+                            <input className="checkbox" type="checkbox" checked={t.done} onChange={() => toggleDone(t)} />
+                            {t.done ? '完了' : '未完了'}
                           </label>
                         </div>
                       </>
@@ -228,11 +263,63 @@ export default function TaskManager() {
                       <button className="small" onClick={() => startEdit(t)}>
                         編集
                       </button>
-                      <button className="small danger" onClick={() => remove(t.id)}>
+
+                      {/* todo_links: link selection */}
+                      <div className="meta" style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
+                        <button
+                          className={isLinkFrom ? 'small primary' : 'small'}
+                          onClick={() => {
+                            if (linkToId === t.id) return;
+                            setLinkFromId(t.id);
+                          }}
+                        >
+                          A
+                        </button>
+                        <button
+                          className={isLinkTo ? 'small primary' : 'small'}
+                          onClick={() => {
+                            if (linkFromId === t.id) return;
+                            setLinkToId(t.id);
+                          }}
+                        >
+                          B
+                        </button>
+                      </div>
+
+                      <button className="small" disabled={linkBusy || !linkFromId || !linkToId} onClick={async () => {
+                        if (!linkFromId || !linkToId) return;
+                        if (linkFromId === linkToId) return;
+                        setLinkBusy(true);
+                        setError(null);
+                        try {
+                          await api('/api/todo-links/batch', {
+                            method: 'POST',
+                            body: JSON.stringify({
+                              action: 'create',
+                              links: [{ from_task_id: linkFromId, to_task_id: linkToId }],
+                            }),
+                          });
+                          setLinkFromId(null);
+                          setLinkToId(null);
+                          await refresh();
+                        } catch (e) {
+                          setError(e instanceof Error ? e.message : String(e));
+                        } finally {
+                          setLinkBusy(false);
+                        }
+                      }}>
+                        リンク作成
+                      </button>
+
+                      <button
+                        className="small danger"
+                        onClick={() => remove(t.id)}
+                      >
                         削除
                       </button>
                     </div>
                   ) : null}
+
                 </div>
               );
             })}

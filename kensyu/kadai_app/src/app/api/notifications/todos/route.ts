@@ -1,32 +1,52 @@
 import { NextResponse } from 'next/server';
-
-// TODO: このサンプルは「ブラウザ通知（1.b: ポーリング）」用の"対象あり"判定APIです。
-// 本番Supabase運用では、(1)期限/所要時間を格納したテーブルを参照し、
-//      (2)通知済みフラグ等を考慮して、(a)今通知すべきTODOの配列を返します。
-//
-// 現状は既存の tasks をSQLiteで参照しているため、期限情報がない=通知候補を返せません。
-// ここは次に DBスキーマを追加する前提の"穴"として用意します。
-
-import { listTasks } from '../../../../lib/db';
+import { getSupabaseServerClient } from '../../../../lib/supabaseClient';
 
 type NotificationItem = {
-  id: number;
+  id: string;
   title: string;
   message: string;
 };
 
 export async function GET() {
-  // 簡易実装: タスク一覧のうち未完了(done=0)を通知候補にする
-  const tasks = await listTasks();
-  const notifications = tasks
-    .filter((t) => t.done === 0)
-    .slice(0, 5)
-    .map((t) => ({
-      id: t.id,
-      title: '未完了タスクがあります',
-      message: t.title,
-    }));
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  // prerender/export 時に env 未設定で落ちないようにする（空レスポンス）
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return NextResponse.json({ notifications: [] as NotificationItem[] });
+  }
+
+  const supabase = await getSupabaseServerClient();
+
+
+  // remind_at <= now() かつ reminder_sent_at が null のタスクを最大5件取得
+  const nowIso = new Date().toISOString();
+
+  const { data: dueTasks, error: fetchErr } = await supabase
+    .from('tasks')
+    .select('id, title, notes, remind_at, reminder_sent_at')
+    .lte('remind_at', nowIso)
+    .is('reminder_sent_at', null)
+    .limit(5);
+
+  if (fetchErr) return NextResponse.json({ error: fetchErr.message }, { status: 500 });
+
+  const notifications: NotificationItem[] = (dueTasks ?? []).map((t) => ({
+    id: t.id,
+    title: t.title,
+    message: t.notes ? String(t.notes).slice(0, 200) : '通知があります',
+  }));
+
+  // 多重送信防止（ただし厳密には transaction が望ましいが、まずは reminder_sent_at を更新）
+  const ids = (dueTasks ?? []).map((t) => t.id);
+  if (ids.length) {
+    await supabase
+      .from('tasks')
+      .update({ reminder_sent_at: nowIso })
+      .in('id', ids);
+  }
 
   return NextResponse.json({ notifications });
 }
+
 

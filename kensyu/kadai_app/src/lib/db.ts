@@ -39,6 +39,25 @@ function openDb() {
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
       )
     `);
+
+    db.run(`
+      CREATE TABLE IF NOT EXISTS task_links (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        from_task_id INTEGER NOT NULL,
+        to_task_id INTEGER NOT NULL,
+        relation_type TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )
+    `);
+
+    db.run(`
+      CREATE INDEX IF NOT EXISTS idx_task_links_from ON task_links(from_task_id);
+    `);
+
+    db.run(`
+      CREATE INDEX IF NOT EXISTS idx_task_links_to ON task_links(to_task_id);
+    `);
+
     db.run(`
       CREATE INDEX IF NOT EXISTS idx_tasks_done ON tasks(done);
     `);
@@ -46,6 +65,7 @@ function openDb() {
 
   return db;
 }
+
 
 function all<T = any>(db: sqlite3.Database, sql: string, params: any[] = []): Promise<T[]> {
   return new Promise((resolve, reject) => {
@@ -180,4 +200,69 @@ export async function toggleDone(id: number) {
     db.close();
   }
 }
+
+type TaskLinkRow = {
+  id: number;
+  from_task_id: number;
+  to_task_id: number;
+  relation_type: string | null;
+  created_at: string;
+};
+
+export async function listTaskLinks(): Promise<TaskLinkRow[]> {
+  const db = openDb();
+  try {
+    return await all<TaskLinkRow>(
+      db,
+      `SELECT id, from_task_id, to_task_id, relation_type, created_at
+       FROM task_links
+       ORDER BY created_at ASC, id DESC`
+    );
+  } finally {
+    db.close();
+  }
+}
+
+export async function createTaskLink({
+  from_task_id,
+  to_task_id,
+  relation_type,
+}: {
+  from_task_id: number;
+  to_task_id: number;
+  relation_type?: string | null;
+}) {
+  const db = openDb();
+  try {
+    const { lastID } = await run(
+      db,
+      `INSERT INTO task_links (from_task_id, to_task_id, relation_type, created_at)
+       VALUES (?, ?, ?, datetime('now'))`,
+      [from_task_id, to_task_id, relation_type ?? null]
+    );
+
+    const link = await get<TaskLinkRow>(
+      db,
+      `SELECT id, from_task_id, to_task_id, relation_type, created_at
+       FROM task_links WHERE id = ?`,
+      [lastID]
+    );
+
+    if (!link) throw new Error('failed to create task_link');
+    return link;
+  } finally {
+    db.close();
+  }
+}
+
+export async function deleteTaskLink(link_id: number) {
+  const db = openDb();
+  try {
+    await run(db, `DELETE FROM task_links WHERE id = ?`, [link_id]);
+    return { ok: true, link_id };
+  } finally {
+    db.close();
+  }
+}
+
 

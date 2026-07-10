@@ -3,16 +3,22 @@
 import { useEffect, useMemo, useState } from 'react';
 
 type Todo = {
-  id: number;
+  id: number | string;
   title: string;
 };
 
 type TodoLink = {
-  id: number;
-  from_todo_id: number;
-  to_todo_id: number;
+  id: number | string;
+  // supabase(task_links) 版では from_task_id/to_task_id
+  // sqlite 旧 UI では from_todo_id/to_todo_id があったため、両対応。
+  from_task_id?: number | string;
+  to_task_id?: number | string;
+  from_todo_id?: number | string;
+  to_todo_id?: number | string;
   created_at: string;
 };
+
+
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
@@ -75,10 +81,11 @@ export default function TodoLinkGraph() {
   }, [todos]);
 
   const nodeById = useMemo(() => {
-    const m = new Map<number, { id: number; title: string; x: number; y: number }>();
-    for (const n of nodes) m.set(n.id, n);
+    const m = new Map<string, { id: string | number; title: string; x: number; y: number }>();
+    for (const n of nodes) m.set(String(n.id), n);
     return m;
   }, [nodes]);
+
 
   if (loading) return <div className="meta">リンク描画準備中...</div>;
   if (error) return <div style={{ color: '#ffb3c0' }}>エラー: {error}</div>;
@@ -94,8 +101,12 @@ export default function TodoLinkGraph() {
         <svg width={600} height={400} style={{ display: 'block' }}>
           {/* edges */}
           {links.map((l) => {
-            const a = nodeById.get(l.from_todo_id);
-            const b = nodeById.get(l.to_todo_id);
+            const fromId = (l.from_task_id ?? l.from_todo_id) as number | string | undefined;
+            const toId = (l.to_task_id ?? l.to_todo_id) as number | string | undefined;
+            if (fromId == null || toId == null) return null;
+            const a = nodeById.get(String(fromId));
+            const b = nodeById.get(String(toId));
+
             if (!a || !b) return null;
             return (
               <line
