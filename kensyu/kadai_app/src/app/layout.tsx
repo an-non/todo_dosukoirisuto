@@ -16,6 +16,15 @@ export default function RootLayout({
     <html lang="ja">
       <body>
         <div className="container">{children}</div>
+        <script
+          // VAPID public key を購読作成側に注入する（PushNotificationSetup が window.__VAPID_PUBLIC_KEY を参照）
+          dangerouslySetInnerHTML={{
+            __html: `window.__VAPID_PUBLIC_KEY = ${JSON.stringify(
+              process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? ''
+            )};`,
+          }}
+        />
+
       </body>
     </html>
   );
